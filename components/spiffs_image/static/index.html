@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP32-WOL</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <div class="esp32-wol-control">
+    <h1>ESP32-WOL 控制台</h1>
+    <div class="wlan-status">
+      <h2>设备状态</h2>
+      <span style="display: flex;">IPV4地址:</span>
+      <span id="ipv4-addr" style="display: flex;"></span>
+      <span style="display: flex;">IPV6地址:</span>
+      <span id="ipv6-addr" style="display: flex;"></span>
+    </div>
+    <div class="wlan-control">
+      <h2>WLAN 连接</h2>
+      <h3>已连接的 WLAN</h3>
+      <div id="connected-wlan" class="connected-wlan"></div>
+      <div id="connected-wlan-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+          <span class="close" onclick="hideModal('connected-wlan-modal')">&times;</span>
+          <h3 id="connected-wlan-ssid"></h3>
+          <label><button type="button" onclick="handleConnectedWLANBtnEvent()">断开连接</button></label>
+        </div>
+      </div>
+
+      <h3>已保存的 WLAN</h3>
+      <div id="saved-wlan" class="saved-wlan"></div>
+      <div id="saved-wlan-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+          <span class="close" onclick="hideModal('saved-wlan-modal')">&times;</span>
+          <h3 id="saved-wlan-ssid"></h3>
+          <label>
+            <button type="button" onclick="handleSavedWLANBtnEvent('forget')">忘记</button>
+            <button type="button" onclick="handleSavedWLANBtnEvent('connect')">连接</button>
+          </label>
+        </div>
+      </div>
+
+      <h3>选取附近的 WLAN</h3>
+      <div id="nearby-wlan" class="nearby-wlan"></div>
+      <div id="nearby-wlan-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+          <span class="close" onclick="hideModal('nearby-wlan-modal')">&times;</span>
+          <h3 id="nearby-wlan-ssid"></h3>
+          <form id="nearby-wlan-form">
+            <label>密码: <input type="password" id="wlan-passwd" style="margin-right: auto;"></label>
+            <button type="submit">连接</button>
+          </form>
+        </div>
+      </div>
+
+      <div id="mask" class="modal" style="display: none;z-index: 1000;">
+        <span class="modal-content">正在处理请求，请稍等......</span>
+      </div>
+    </div>
+    <div class="wol-function">
+      <h2>WOL 功能</h2>
+      <form id="wol-form">
+        <input type="text" id="mac-address" placeholder="AA:BB:CC:DD:EE:FF" required />
+        <button type="submit">发送魔术包</button>
+      </form>
+      <div id="send-result"></div>
+    </div>
+  </div>
+</body>
+</html>

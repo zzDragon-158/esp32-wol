@@ -1,0 +1,22 @@
+{
+    "idf.monitorPort": "COM3",
+    "idf.portWin": "COM3",
+    "idf.flashType": "UART",
+    "files.associations": {
+        "wifi_common.h": "c",
+        "cjson.h": "c",
+        "web_common.h": "c",
+        "netdb.h": "c",
+        "bit": "c",
+        "charconv": "c",
+        "compare": "c",
+        "cstddef": "c",
+        "string": "c",
+        "optional": "c",
+        "limits": "c",
+        "memory": "c",
+        "new": "c",
+        "functional": "c",
+        "esp_netif_net_stack.h": "c"
+    }
+}
