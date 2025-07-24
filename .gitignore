@@ -3,3 +3,4 @@ build*/
 dependencies.lock
 managed_components/
 partition_table/
+components/spiffs_image/saved_wlan.json
