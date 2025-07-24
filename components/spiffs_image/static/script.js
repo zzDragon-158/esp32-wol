@@ -192,8 +192,8 @@ async function handleConnectedWLANBtnEvent() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ group, ssid })
   });
-  const result = await res.json();
-  alert(result.message || `已断开与 ${ssid} 的连接`);
+  const text = await res.text();
+  alert(text);
   document.getElementById("mask").style.display = 'none';
   document.getElementById('connected-wlan-modal').style.display = 'none';
   fetchSSIDList();
@@ -209,8 +209,8 @@ async function handleSavedWLANBtnEvent(action) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ group, action, ssid })
   });
-  const result = await res.json();
-  alert(result.message || '连接成功？');
+  const text = await res.text();
+  alert(text);
   document.getElementById("mask").style.display = 'none';
   document.getElementById('saved-wlan-modal').style.display = 'none';
   fetchSSIDList();
@@ -227,8 +227,8 @@ document.getElementById("nearby-wlan-form").addEventListener("submit", async fun
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ group, ssid, passwd })
   });
-  const result = await res.json();
-  alert(result.message || '连接成功？');
+  const text = await res.text();
+  alert(text);
   document.getElementById("mask").style.display = 'none';
   document.getElementById('nearby-wlan-modal').style.display = 'none';
   fetchSSIDList();
@@ -245,21 +245,67 @@ document.getElementById("wol-form").addEventListener("submit", async function (e
     return;
   }
 
-  try {
-    const res = await fetch('/wol', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mac_address })
-    });
-    if (res.status === 200) {
-      resultDiv.innerText = 'Magic packet has been sent to ' + mac_address;
-    } else {
-      resultDiv.innerText = 'Failed to send packet. Status: ' + res.status;
-    }
-  } catch (err) {
-    resultDiv.innerText = 'Error sending request.';
-  }
+  const res = await fetch('/wol', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mac_address })
+  });
+  const text = await res.text();
+  resultDiv.innerText = text;
 });
+
+function uploadFile() {
+  const fileInput = document.getElementById('file-input');
+  const file = fileInput.files[0];
+  if (!file) {
+    alert("请选择一个文件");
+    return;
+  }
+
+  const uploadBtn = document.getElementById("upload-btn");
+  const upgradeBtn = document.getElementById("upgrade-btn");
+  const xhr = new XMLHttpRequest();
+  uploadBtn.disabled = true;
+  upgradeBtn.disabled = true;
+  xhr.upload.onprogress = function (event) {
+    if (event.lengthComputable) {
+      const percent = Math.round((event.loaded / event.total) * 100);
+      document.getElementById("upload-progress").style.display = "block";
+      document.getElementById("upload-progress").value = percent;
+      document.getElementById("progress-text").textContent = `上传进度：${percent}%`;
+    }
+  };
+  xhr.onload = function () {
+    uploadBtn.disabled = false;
+    alert(xhr.responseText);
+    if (xhr.status === 200) {
+      upgradeBtn.disabled = false;
+    }
+    document.getElementById("upload-progress").style.display = "none";
+  };
+  xhr.onerror = function () {
+    alert("上传出错");
+    document.getElementById("upload-progress").style.display = "none";
+  };
+  xhr.onerror = function () {
+    alert("上传出错");
+    document.getElementById("upload-progress").style.display = "none";
+  };
+
+  xhr.open("POST", "/upload", true);
+  xhr.setRequestHeader("Content-Type", "application/octet-stream");
+  xhr.send(file);
+}
+
+async function performUpgrade() {
+  document.getElementById("mask").style.display = 'flex';
+  const res = await fetch('/upgrade', {
+    method: 'GET',
+  });
+  const text = await res.text();
+  alert(text);
+  document.getElementById("mask").style.display = 'none';
+}
 
 window.onload = function () {
   fetchSSIDList();

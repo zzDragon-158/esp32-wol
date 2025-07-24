@@ -54,10 +54,6 @@
           </form>
         </div>
       </div>
-
-      <div id="mask" class="modal" style="display: none;z-index: 1000;">
-        <span class="modal-content">正在处理请求，请稍等......</span>
-      </div>
     </div>
     <div class="wol-function">
       <h2>WOL 功能</h2>
@@ -67,6 +63,19 @@
       </form>
       <div id="send-result"></div>
     </div>
+    <div class="upload-function">
+      <h2>上传固件</h2>
+      <form id="upload-form" enctype="multipart/form-data">
+        <input type="file" id="file-input" name="file" />
+        <button type="button" id="upload-btn" onclick="uploadFile()">上传</button>
+      </form>
+      <progress id="upload-progress" value="0" max="100" style="width: 100%; display: none;"></progress>
+      <span id="progress-text"></span>
+      <button type="button" id="upgrade-btn" onclick="performUpgrade()" disabled>升级</button>
+    </div>
+  </div>
+  <div id="mask" class="modal" style="display: none;z-index: 1000;">
+    <span class="modal-content" id="mask-content">正在处理请求，请稍等......</span>
   </div>
 </body>
 </html>

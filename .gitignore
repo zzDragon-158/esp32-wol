@@ -1,2 +1,5 @@
 .vscode/
 build*/
+dependencies.lock
+managed_components/
+partition_table/

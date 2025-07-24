@@ -6,6 +6,7 @@
 #define SAVED_WLAN_FILEPATH "/spiffs/saved_wlan.json"
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
+#define OTA_BUF_SIZE 1024
 
 static EventGroupHandle_t wifi_event_group;
 static char connected_ssid[33] = { 0 };
@@ -16,6 +17,7 @@ static int udp_socket = 0;
 static const char *TAG_WEB = "Web Server";
 static const char *TAG_AP = "WiFi SoftAP";
 static const char *TAG_STA = "WiFi Sta";
+static const char *TAG_OTA = "OTA";
 static esp_netif_t *esp_netif_ap = NULL;
 static esp_netif_t *esp_netif_sta = NULL;
 
@@ -276,7 +278,13 @@ static esp_err_t scan_get_handler(httpd_req_t *req) {
     // scan ap
     static wifi_ap_record_t ap_records[MAX_SCAN_AP_NUMBER];
     uint16_t total_ap_num = MAX_SCAN_AP_NUMBER;
-    if (fast_scan(&total_ap_num, ap_records) != ESP_OK) {
+    if (
+#ifndef ESP_WIFI_STA_SCAN_FULL
+        fast_scan(&total_ap_num, ap_records)
+#else
+        full_scan(&total_ap_num, ap_records)
+#endif
+        != ESP_OK) {
         httpd_resp_set_type(req, "application/json");
         httpd_resp_sendstr(req, "{}");
         return ESP_FAIL;
@@ -511,9 +519,9 @@ static esp_err_t root_get_handler(httpd_req_t *req) {
 static esp_err_t wlan_post_handler(httpd_req_t* req) {
     esp_err_t ret = ESP_OK;
     // recv post
-    char buf[1024] = {0};
+    static char buf[1024] = {0};
     if (httpd_req_recv(req, buf, sizeof(buf) - 1) <= 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data received");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "未接收任何数据");
         return ESP_FAIL;
     }
 
@@ -528,10 +536,12 @@ static esp_err_t wlan_post_handler(httpd_req_t* req) {
 
     // handle
     if (!group || !cJSON_IsString(group)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "无法从json解析group");
         ret = ESP_FAIL;
         goto wlan_over;
     }
     if (!ssid || !cJSON_IsString(ssid)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "无法从json解析ssid");
         ret = ESP_FAIL;
         goto wlan_over;
     }
@@ -558,11 +568,10 @@ static esp_err_t wlan_post_handler(httpd_req_t* req) {
     
 wlan_over:
     cJSON_Delete(root);
-    httpd_resp_set_type(req, "application/json");
     if (ret == ESP_OK)
-        httpd_resp_sendstr(req, "{\"message\":\"Success.\"}");
+        httpd_resp_sendstr(req, "操作成功");
     else
-        httpd_resp_sendstr(req, "{\"message\":\"Failure.\"}");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "操作失败");
     return ret;
 }
 
@@ -571,30 +580,129 @@ static esp_err_t wol_post_handler(httpd_req_t* req) {
     char buf[1024] = {0};
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (ret <= 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data received");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "未接收到任何数据");
         return ESP_FAIL;
     }
 
     // 解析JSON，获取mac_address字段
     cJSON *root = cJSON_Parse(buf);
     if (!root) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "无法从json解析group");
         return ESP_FAIL;
     }
     cJSON *mac_item = cJSON_GetObjectItem(root, "mac_address");
     if (!mac_item || !cJSON_IsString(mac_item)) {
         cJSON_Delete(root);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing mac_address");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "无法从json解析mac_address");
         return ESP_FAIL;
     }
 
     // 调用发送魔术包函数
     send_magic_packet(mac_item->valuestring);
 
+    static char text[128];
+    sprintf(text, "已发送魔术包至[%s]", mac_item->valuestring);
     cJSON_Delete(root);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, "{\"message\":\"Magic packet sent\"}");
+    httpd_resp_sendstr(req, text);
     return ESP_OK;
+}
+
+static esp_err_t upload_post_handler(httpd_req_t* req) {
+    if (req->content_len > (1024 * 1536)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "固件大小不得大于1.5MB");
+        return ESP_FAIL;
+    }
+
+    char buf[1024];
+    int received;
+    FILE *f = fopen("/spiffs/bin/fireware.bin", "w");
+    if (!f) {
+        ESP_LOGE(TAG_WEB, "打开文件失败");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "固件上传失败");
+        return ESP_FAIL;
+    }
+
+    while ((received = httpd_req_recv(req, buf, sizeof(buf))) > 0) {
+        fwrite(buf, 1, received, f);
+    }
+
+    fclose(f);
+    httpd_resp_sendstr(req, "固件上传成功");
+    return ESP_OK;
+}
+
+void restart_task(void* pvParameters) {
+    vTaskDelay(pdMS_TO_TICKS(3000));  // 延迟3秒
+    esp_restart();
+}
+
+static esp_err_t upgrade_get_handler(httpd_req_t* req) {
+    FILE *f = fopen("/spiffs/bin/fireware.bin", "rb");
+    if (!f) {
+        ESP_LOGE(TAG_OTA, "Failed to open firmware file");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "还未上传固件");
+        return ESP_FAIL;
+    }
+
+    const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
+    if (!update_partition) {
+        ESP_LOGE(TAG_OTA, "No OTA partition found");
+        fclose(f);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "升级失败");
+        return ESP_FAIL;
+    }
+
+    esp_ota_handle_t ota_handle;
+    esp_err_t err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &ota_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG_OTA, "esp_ota_begin failed");
+        fclose(f);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "升级失败");
+        return err;
+    }
+
+    uint8_t *buf = malloc(OTA_BUF_SIZE);
+    if (!buf) {
+        ESP_LOGE(TAG_OTA, "Failed to allocate buffer");
+        fclose(f);
+        esp_ota_end(ota_handle);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "升级失败");
+        return ESP_ERR_NO_MEM;
+    }
+
+    size_t read_bytes;
+    while ((read_bytes = fread(buf, 1, OTA_BUF_SIZE, f)) > 0) {
+        err = esp_ota_write(ota_handle, buf, read_bytes);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG_OTA, "esp_ota_write failed: %s", esp_err_to_name(err));
+            free(buf);
+            fclose(f);
+            esp_ota_end(ota_handle);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "升级失败");
+            return err;
+        }
+    }
+
+    free(buf);
+    fclose(f);
+
+    err = esp_ota_end(ota_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG_OTA, "esp_ota_end failed");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "升级失败");
+        return err;
+    }
+
+    err = esp_ota_set_boot_partition(update_partition);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG_OTA, "esp_ota_set_boot_partition failed");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "升级失败");
+        return err;
+    }
+
+    httpd_resp_sendstr(req, "升级成功, 设备将在3秒后重启");
+    ESP_LOGI(TAG_OTA, "OTA update written successfully. Restarting...");
+    xTaskCreate(restart_task, "restart_task", 2048, NULL, 5, NULL);
     return ESP_OK;
 }
 
@@ -676,6 +784,22 @@ static httpd_handle_t web_server_start(void) {
             .user_ctx = NULL,
         };
         httpd_register_uri_handler(server, &wol_uri);
+
+        httpd_uri_t upload_uri = {
+            .uri = "/upload",
+            .method = HTTP_POST,
+            .handler = upload_post_handler,
+            .user_ctx = NULL,
+        };
+        httpd_register_uri_handler(server, &upload_uri);
+
+        httpd_uri_t upgrade_uri = {
+            .uri = "/upgrade",
+            .method = HTTP_GET,
+            .handler = upgrade_get_handler,
+            .user_ctx = NULL,
+        };
+        httpd_register_uri_handler(server, &upgrade_uri);
 
         httpd_uri_t static_uri = {
             .method = HTTP_GET,

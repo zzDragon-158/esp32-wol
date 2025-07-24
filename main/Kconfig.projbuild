@@ -27,6 +27,21 @@ menu "ESP32 WOL Configuration"
             default 4
             help
                 Max number of the STA connects to AP.
+
+        comment "STA Configuration"
+        
+        choice ESP_WIFI_STA_SCAN
+            prompt "STA scan method"
+            default ESP_WIFI_STA_SCAN_FAST
+            help
+                Select the STA scan method.
+                Full scan can scan more SSIDs, but it may cause slower web response.
+
+            config ESP_WIFI_STA_SCAN_FAST
+                bool "fast"
+            config ESP_WIFI_STA_SCAN_FULL
+                bool "full"
+        endchoice
     endmenu
 
     menu "ESP_BLINK Configuration"

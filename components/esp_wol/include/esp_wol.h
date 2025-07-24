@@ -27,6 +27,10 @@
 #include "esp_wifi.h"
 #include "lwip/sockets.h"
 
+// ota
+#include "esp_ota_ops.h"
+#include "esp_partition.h"
+
 esp_err_t esp_wol_init();
 
 #endif

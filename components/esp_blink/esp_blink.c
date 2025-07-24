@@ -18,7 +18,7 @@ static void blink_led(void)
     /* If the addressable LED is enabled */
     if (s_led_state) {
         /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-        led_strip_set_pixel(led_strip, 0, 0, 7, 0);
+        led_strip_set_pixel(led_strip, 0, 0, 0, 7);
         /* Refresh the strip to send data */
         led_strip_refresh(led_strip);
     } else {
@@ -29,7 +29,7 @@ static void blink_led(void)
 
 static void configure_led(void)
 {
-    ESP_LOGI(TAG_BLINK, "Example configured to blink addressable LED!");
+    ESP_LOGI(TAG_BLINK, "configured to blink addressable LED!");
     /* LED strip initialization with the GPIO and pixels number*/
     led_strip_config_t strip_config = {
         .strip_gpio_num = BLINK_GPIO,
